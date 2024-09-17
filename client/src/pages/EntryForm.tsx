@@ -6,7 +6,7 @@ import {
   readEntry,
   removeEntry,
   updateEntry,
-} from '../data';
+} from '../lib/data';
 
 export function EntryForm() {
   const { entryId } = useParams();

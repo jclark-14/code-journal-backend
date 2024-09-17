@@ -1,16 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { FaPencilAlt } from 'react-icons/fa';
-import { Entry, readEntries } from '../data';
+import { Entry, readEntries } from '../lib/data';
+import { UserContext } from '../components/UserContext';
 
 export function EntryList() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<unknown>();
+  const { user } = useContext(UserContext);
 
   useEffect(() => {
     async function fetchEntries() {
       try {
+        setIsLoading(true);
         const entries = await readEntries();
         setEntries(entries);
       } catch (err) {
@@ -20,7 +23,7 @@ export function EntryList() {
       }
     }
     fetchEntries();
-  }, []);
+  }, [user]);
 
   if (isLoading) return <div>Loading...</div>;
   if (error) {
@@ -31,7 +34,26 @@ export function EntryList() {
       </div>
     );
   }
-
+  if (entries.length === 0) {
+    return (
+      <div className="row">
+        <div className="column-full d-flex justify-between align-center">
+          <h1>Entries</h1>
+          <h3>
+            {user && (
+              <Link to="/details/new" className="white-text form-link">
+                NEW
+              </Link>
+            )}
+          </h3>
+        </div>
+        <p>
+          {user && 'No entries found. Create new entry'}
+          {!user && 'Please sign in to create a new entry'}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="container">
       <div className="row">

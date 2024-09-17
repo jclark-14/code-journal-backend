@@ -1,9 +1,21 @@
 /* eslint-disable @typescript-eslint/no-unused-vars -- Remove me */
 import 'dotenv/config';
 import pg from 'pg';
+import argon2 from 'argon2';
 import express from 'express';
-import { Entry } from '../client/src/data';
-import { ClientError, errorMiddleware } from './lib/index.js';
+import jwt from 'jsonwebtoken';
+import { Entry } from '../client/src/lib/data';
+import { ClientError, errorMiddleware, authMiddleware } from './lib/index.js';
+
+type User = {
+  userId: number;
+  username: string;
+  hashedPassword: string;
+};
+type Auth = {
+  username: string;
+  password: string;
+};
 
 const db = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
@@ -12,11 +24,67 @@ const db = new pg.Pool({
   },
 });
 
+const hashKey = process.env.TOKEN_SECRET;
+if (!hashKey) throw new Error('TOKEN_SECRET not found in .env');
+
 const app = express();
-
 app.use(express.json());
+app.post('/api/auth/sign-up', async (req, res, next) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      throw new ClientError(400, 'username and password are required fields');
+    }
+    const hashedPassword = await argon2.hash(password);
+    const sql = `
+    insert into users ("username", "hashedPassword")
+    values ($1, $2)
+    returning "userId", "username", "createdAt"
+    `;
+    const params = [username, hashedPassword];
+    const results = await db.query<User>(sql, params);
+    const user = results.rows[0];
+    res.status(201).json(user);
+  } catch (err) {
+    next(err);
+  }
+});
 
-app.get('/api/entries', async (req, res, next) => {
+app.post('/api/auth/sign-in', async (req, res, next) => {
+  try {
+    const { username, password } = req.body as Partial<Auth>;
+    if (!username || !password) {
+      throw new ClientError(401, 'invalid login');
+    }
+    const sql = `
+    select "userId", "hashedPassword"
+    from users
+    where "username" = $1
+    `;
+    const results = await db.query<User>(sql, [username]);
+    const user = results.rows[0];
+    if (!user) {
+      throw new ClientError(401, 'invalid login');
+    }
+    const isPasswordValid = await argon2.verify(user.hashedPassword, password);
+    if (!isPasswordValid) {
+      throw new ClientError(401, 'invalid login');
+    }
+    const payload = {
+      userId: user.userId,
+      username,
+    };
+    const token = jwt.sign(payload, hashKey);
+    res.status(200).json({
+      user: payload,
+      token,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.get('/api/entries', authMiddleware, async (req, res, next) => {
   try {
     const sql = `
   select * from entries
@@ -30,7 +98,7 @@ app.get('/api/entries', async (req, res, next) => {
   }
 });
 
-app.get('/api/details/:entryId', async (req, res, next) => {
+app.get('/api/details/:entryId', authMiddleware, async (req, res, next) => {
   try {
     const { entryId } = req.params;
     if (!Number.isInteger(+entryId)) {
@@ -51,7 +119,7 @@ app.get('/api/details/:entryId', async (req, res, next) => {
   }
 });
 
-app.post('/api/details/new', async (req, res, next) => {
+app.post('/api/details/new', authMiddleware, async (req, res, next) => {
   try {
     const { title, notes, photoUrl } = req.body;
     if (!title || !notes || !photoUrl) {
@@ -74,7 +142,7 @@ app.post('/api/details/new', async (req, res, next) => {
   }
 });
 
-app.put('/api/details/:entryId', async (req, res, next) => {
+app.put('/api/details/:entryId', authMiddleware, async (req, res, next) => {
   try {
     const { entryId } = req.params;
     if (!Number.isInteger(+entryId)) {
@@ -107,7 +175,7 @@ app.put('/api/details/:entryId', async (req, res, next) => {
   }
 });
 
-app.delete('/api/details/:entryId', async (req, res, next) => {
+app.delete('/api/details/:entryId', authMiddleware, async (req, res, next) => {
   try {
     const { entryId } = req.params;
     if (!Number.isInteger(+entryId)) {
@@ -125,6 +193,8 @@ app.delete('/api/details/:entryId', async (req, res, next) => {
     next(err);
   }
 });
+
+app.use(errorMiddleware);
 
 app.listen(process.env.PORT, () => {
   console.log(`express server listening on port ${process.env.PORT}`);
