@@ -5,66 +5,56 @@ export type Entry = {
   photoUrl: string;
 };
 
-type Data = {
-  entries: Entry[];
-  nextEntryId: number;
-};
-
-const dataKey = 'code-journal-data';
-
-function readData(): Data {
-  let data: Data;
-  const localData = localStorage.getItem(dataKey);
-  if (localData) {
-    data = JSON.parse(localData) as Data;
-  } else {
-    data = {
-      entries: [],
-      nextEntryId: 1,
-    };
-  }
-  return data;
-}
-
-function writeData(data: Data): void {
-  const dataJSON = JSON.stringify(data);
-  localStorage.setItem(dataKey, dataJSON);
-}
-
 export async function readEntries(): Promise<Entry[]> {
-  return readData().entries;
+  const response = await fetch('/api/entries');
+  if (!response.ok) {
+    throw new Error(`HTTP fetch error. status: ${response.status}`);
+  }
+  return (await response.json()) as Entry[];
 }
 
 export async function readEntry(entryId: number): Promise<Entry | undefined> {
-  return readData().entries.find((e) => e.entryId === entryId);
+  const response = await fetch(`/api/details/${entryId}`);
+  if (!response.ok) {
+    throw new Error(`HTTP fetch error. status: ${response.status}`);
+  }
+  return (await response.json()) as Entry;
 }
 
 export async function addEntry(entry: Entry): Promise<Entry> {
-  const data = readData();
-  const newEntry = {
-    ...entry,
-    entryId: data.nextEntryId++,
+  const req = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(entry),
   };
-  data.entries.unshift(newEntry);
-  writeData(data);
+  const response = await fetch('/api/details/new', req);
+  if (!response.ok) {
+    throw new Error(`fetch Error ${response.status}`);
+  }
+  const newEntry = await response.json();
   return newEntry;
 }
 
 export async function updateEntry(entry: Entry): Promise<Entry> {
-  const data = readData();
-  const newEntries = data.entries.map((e) =>
-    e.entryId === entry.entryId ? entry : e
-  );
-  data.entries = newEntries;
-  writeData(data);
+  const req = {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(entry),
+  };
+  const response = await fetch(`/api/details/${entry.entryId}`, req);
+  if (!response.ok) throw new Error(`fetch Error ${response.status}`);
   return entry;
 }
 
 export async function removeEntry(entryId: number): Promise<void> {
-  const data = readData();
-  const updatedArray = data.entries.filter(
-    (entry) => entry.entryId !== entryId
-  );
-  data.entries = updatedArray;
-  writeData(data);
+  const response = await fetch(`/api/details/${entryId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error(`fetch Error ${response.status}`);
+  }
 }

@@ -9,7 +9,7 @@ export function EntryList() {
   const [error, setError] = useState<unknown>();
 
   useEffect(() => {
-    async function load() {
+    async function fetchEntries() {
       try {
         const entries = await readEntries();
         setEntries(entries);
@@ -19,7 +19,7 @@ export function EntryList() {
         setIsLoading(false);
       }
     }
-    load();
+    fetchEntries();
   }, []);
 
   if (isLoading) return <div>Loading...</div>;

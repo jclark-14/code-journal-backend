@@ -8,12 +8,6 @@ import {
   updateEntry,
 } from '../data';
 
-/**
- * Form that adds or edits an entry.
- * Gets `entryId` from route.
- * If `entryId` === 'new' then creates a new entry.
- * Otherwise reads the entry and edits it.
- */
 export function EntryForm() {
   const { entryId } = useParams();
   const [entry, setEntry] = useState<Entry>();
@@ -41,22 +35,35 @@ export function EntryForm() {
     if (isEditing) load(+entryId);
   }, [entryId]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const newEntry = Object.fromEntries(formData) as unknown as Entry;
-    if (isEditing) {
-      updateEntry({ ...entry, ...newEntry });
-    } else {
-      addEntry(newEntry);
+    try {
+      if (isEditing) {
+        newEntry.entryId = parseInt(entryId, 10);
+        await updateEntry(newEntry);
+      }
+      if (entryId === 'new') {
+        await addEntry(newEntry);
+      }
+      navigate('/');
+    } catch (err) {
+      setError(err);
     }
-    navigate('/');
   }
 
-  function handleDelete() {
-    if (!entry?.entryId) throw new Error('Should never happen');
-    removeEntry(entry.entryId);
-    navigate('/');
+  async function handleDelete() {
+    if (!entry?.entryId) {
+      setError(new Error('No entryId'));
+      return;
+    }
+    try {
+      await removeEntry(entry.entryId);
+      navigate('/');
+    } catch (err) {
+      setError(err);
+    }
   }
 
   if (isLoading) return <div>Loading...</div>;
